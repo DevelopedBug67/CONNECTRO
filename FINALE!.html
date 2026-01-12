@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Connectro</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800;900&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --bg-grad: radial-gradient(at 0% 0%, rgba(62, 0, 107, 0.7) 0px, transparent 50%), 
+             radial-gradient(at 100% 100%, rgba(0, 110, 255, 0.5) 0px, transparent 50%),
+             #0a0a0a;
+  --neon-pink: #ff00ff;
+  --neon-blue: #00ffff;
+  --neon-purple: #bd00ff;
+  --glass-bg: rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(255, 255, 255, 0.15);
+  --text: #fff;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+body {
+  margin: 0;
+  height: 100dvh;
+  background: var(--bg-grad);
+  font-family: 'Montserrat', sans-serif;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: white;
+}
+
+/* PHONE CHASSIS */
+#phone {
+  position: relative;
+  width: min(90vw, 350px);
+  height: min(88dvh, 720px);
+  background: #000;
+  border-radius: 45px;
+  box-shadow: 
+    0 0 30px rgba(189, 0, 255, 0.3),
+    0 0 60px rgba(0, 255, 255, 0.15),
+    inset 0 0 0 4px #222;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 1;
+}
+
+/* SCREEN AREA */
+#screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #050505;
+  border-radius: 40px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ================= VIEWS ================= */
+.view-section {
+  position: absolute;
+  inset: 0;
+  padding-bottom: 80px; /* Space for navbar */
+  overflow-y: auto;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  z-index: 5;
+  background: #050505;
+}
+
+.view-section.active {
+  opacity: 1;
+  pointer-events: auto;
+  z-index: 10;
+}
+
+/* --- CAMERA VIEW --- */
+#view-camera {
+  background: black;
+  overflow: hidden;
+}
+#video { display: none; }
+#canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  transform: scaleX(-1); 
+}
+
+/* --- CHAT VIEW --- */
+#view-chat {
+  padding: 80px 20px 20px;
+}
+.chat-title { font-size: 28px; font-weight: 900; margin-bottom: 20px; background: linear-gradient(to right, #fff, var(--neon-blue)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.search-bar { width: 100%; padding: 12px; background: #1a1a1a; border: 1px solid #333; border-radius: 12px; color: white; margin-bottom: 20px; font-family: inherit; }
+
+.chat-item {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 15px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  margin-bottom: 12px;
+  transition: 0.2s;
+}
+.chat-item:active { transform: scale(0.98); background: rgba(255,255,255,0.15); }
+.avatar { width: 50px; height: 50px; border-radius: 50%; background: linear-gradient(45deg, var(--neon-pink), var(--neon-purple)); position: relative; }
+.avatar::after { content:''; position: absolute; bottom: 2px; right: 2px; width: 10px; height: 10px; background: #0f0; border: 2px solid #000; border-radius: 50%; }
+.chat-info h4 { margin: 0 0 4px 0; font-size: 15px; }
+.chat-info p { margin: 0; font-size: 12px; opacity: 0.6; }
+.time { margin-left: auto; font-size: 11px; opacity: 0.4; }
+
+/* --- PROFILE VIEW --- */
+#view-profile {
+  padding: 0;
+}
+.profile-header {
+  height: 250px;
+  background: linear-gradient(to bottom right, #222, #000);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid #333;
+}
+.big-avatar {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: url('https://i.pravatar.cc/150?img=33'); /* Placeholder */
+  background-size: cover;
+  border: 3px solid var(--neon-blue);
+  box-shadow: 0 0 20px rgba(0,255,255,0.4);
+  margin-bottom: 10px;
+}
+.profile-name { font-size: 22px; font-weight: 800; }
+.profile-handle { font-size: 14px; color: var(--neon-pink); margin-bottom: 15px; }
+
+.stats-row { display: flex; gap: 30px; text-align: center; }
+.stat-item b { display: block; font-size: 18px; }
+.stat-item span { font-size: 11px; opacity: 0.6; }
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 2px;
+  padding-top: 2px;
+}
+.grid-img { aspect-ratio: 1; background: #222; position: relative; }
+.grid-img:nth-child(odd) { background: #1a1a1a; }
+
+/* ================= UI OVERLAYS ================= */
+
+/* TOP BAR */
+#top-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 70px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 25px;
+  z-index: 50;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+}
+.logo-text {
+  font-weight: 900;
+  font-size: 18px;
+  letter-spacing: 1px;
+  background: linear-gradient(90deg, var(--neon-blue), #fff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  pointer-events: auto;
+}
+
+/* CAMERA CONTROLS (Only visible in Camera View) */
+#camera-ui {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+  transition: opacity 0.2s;
+}
+#camera-ui.hidden { opacity: 0; pointer-events: none; }
+
+#filter-tray {
+  position: absolute;
+  bottom: 180px; /* Raised to make room for nav */
+  left: 50%;
+  transform: translateX(-50%) translateY(20px) scale(0.9);
+  background: rgba(20, 20, 20, 0.85);
+  backdrop-filter: blur(12px);
+  padding: 8px;
+  border-radius: 40px;
+  border: 1px solid var(--glass-border);
+  display: flex;
+  gap: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+#filter-tray.open { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; pointer-events: auto; }
+
+.filter-chip {
+  width: 44px; height: 44px;
+  border-radius: 50%; border: none;
+  background: rgba(255,255,255,0.1);
+  font-size: 22px; cursor: pointer;
+  display: grid; place-items: center; transition: 0.2s;
+}
+.filter-chip.active { background: var(--neon-blue); box-shadow: 0 0 15px var(--neon-blue); transform: scale(1.15); }
+
+#shutter-area {
+  position: absolute;
+  bottom: 90px;
+  left: 0; right: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 40px;
+  pointer-events: auto;
+}
+
+#shutter-btn {
+  width: 65px; height: 65px;
+  border-radius: 50%;
+  background: transparent;
+  border: 4px solid white;
+  display: grid; place-items: center;
+  cursor: pointer;
+}
+#shutter-inner { width: 48px; height: 48px; background: white; border-radius: 50%; transition: 0.1s; }
+#shutter-btn:active #shutter-inner { transform: scale(0.85); }
+
+.mini-btn { font-size: 24px; cursor: pointer; opacity: 0.8; }
+
+/* ================= BOTTOM NAV ================= */
+#bottom-nav {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 80px;
+  background: rgba(0,0,0,0.8);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid var(--glass-border);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  z-index: 100;
+  padding-bottom: 10px;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: #666;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.3s;
+  width: 60px;
+}
+
+.nav-icon { font-size: 24px; margin-bottom: 2px; filter: grayscale(1); transition: 0.3s; }
+.nav-item.active { color: white; }
+.nav-item.active .nav-icon { filter: grayscale(0); text-shadow: 0 0 10px var(--neon-pink); transform: translateY(-5px); }
+
+#flash {
+  position: absolute; inset: 0; background: white; opacity: 0; pointer-events: none; z-index: 200; transition: opacity 0.1s;
+}
+</style>
+</head>
+<body>
+
+<div id="phone">
+  
+  <div id="top-bar">
+    <div class="logo-text">CONNECTRO</div>
+    <div style="font-size:12px; opacity:0.7;">📶 5G</div>
+  </div>
+
+  <div id="screen">
+    
+    <div id="view-camera" class="view-section active">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="canvas"></canvas>
+      
+      <div id="camera-ui">
+        <div id="filter-tray">
+          <button class="filter-chip active" onclick="setFilter('none', this)">🚫</button>
+          <button class="filter-chip" onclick="setFilter('sunglasses', this)">🕶️</button>
+          <button class="filter-chip" onclick="setFilter('crown', this)">👑</button>
+          <button class="filter-chip" onclick="setFilter('angry', this)">💢</button>
+          <button class="filter-chip" onclick="setFilter('blush', this)">💖</button>
+        </div>
+
+        <div id="shutter-area">
+          <div class="mini-btn" onclick="toggleTray()">✨</div>
+          <div id="shutter-btn" onclick="takePhoto()"><div id="shutter-inner"></div></div>
+          <div class="mini-btn">🔄</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-chat" class="view-section">
+      <div class="chat-title">Messages</div>
+      <input type="text" class="search-bar" placeholder="Search friends...">
+      
+      <div class="chat-item">
+        <div class="avatar"></div>
+        <div class="chat-info">
+          <h4>Cyber_Kitten</h4>
+          <p>Yooo did you see that photo? 🔥</p>
+        </div>
+        <div class="time">2m</div>
+      </div>
+
+      <div class="chat-item">
+        <div class="avatar" style="background: linear-gradient(45deg, blue, cyan)"></div>
+        <div class="chat-info">
+          <h4>GlitchBoii</h4>
+          <p>Sent a sticker</p>
+        </div>
+        <div class="time">1h</div>
+      </div>
+
+      <div class="chat-item">
+        <div class="avatar" style="background: linear-gradient(45deg, yellow, red)"></div>
+        <div class="chat-info">
+          <h4>NeonRider</h4>
+          <p>Where are we meeting?</p>
+        </div>
+        <div class="time">3h</div>
+      </div>
+    </div>
+
+    <div id="view-profile" class="view-section">
+      <div class="profile-header">
+        <div class="big-avatar"></div>
+        <div class="profile-name">Alex Drift</div>
+        <div class="profile-handle">@alex_v2</div>
+        <div class="stats-row">
+          <div class="stat-item"><b>12.5k</b><span>Followers</span></div>
+          <div class="stat-item"><b>420</b><span>Following</span></div>
+          <div class="stat-item"><b>88</b><span>Posts</span></div>
+        </div>
+      </div>
+      <div class="profile-grid">
+        <div class="grid-img"></div>
+        <div class="grid-img"></div>
+        <div class="grid-img"></div>
+        <div class="grid-img"></div>
+        <div class="grid-img"></div>
+        <div class="grid-img"></div>
+      </div>
+    </div>
+
+    <div id="flash"></div>
+
+  </div> <div id="bottom-nav">
+    <div class="nav-item" onclick="switchView('chat')">
+      <div class="nav-icon">💬</div>
+      <div>Chat</div>
+    </div>
+    <div class="nav-item active" onclick="switchView('camera')">
+      <div class="nav-icon">📸</div>
+      <div>Cam</div>
+    </div>
+    <div class="nav-item" onclick="switchView('profile')">
+      <div class="nav-icon">👤</div>
+      <div>Profile</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/** * APP NAVIGATION LOGIC 
+ */
+let currentView = 'camera';
+
+function switchView(viewName) {
+  currentView = viewName;
+  
+  // Update Content Visibility
+  document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+  document.getElementById(`view-${viewName}`).classList.add('active');
+
+  // Update Nav Icons
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  // Find index based on name
+  const index = viewName === 'chat' ? 0 : viewName === 'camera' ? 1 : 2;
+  document.querySelectorAll('.nav-item')[index].classList.add('active');
+
+  // Toggle Camera UI overlay
+  const camUI = document.getElementById('camera-ui');
+  if(viewName === 'camera') {
+    camUI.classList.remove('hidden');
+  } else {
+    camUI.classList.add('hidden');
+  }
+}
+
+/** * CAMERA & FILTER LOGIC 
+ */
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+const tray = document.getElementById('filter-tray');
+const flash = document.getElementById('flash');
+
+let currentFilter = 'none';
+let faceResults = null;
+
+function resizeCanvas() {
+  const container = document.getElementById('screen');
+  canvas.width = container.clientWidth;
+  canvas.height = container.clientHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+function toggleTray() {
+  tray.classList.toggle('open');
+}
+
+function setFilter(name, btn) {
+  currentFilter = name;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function takePhoto() {
+  flash.style.opacity = 1;
+  setTimeout(() => flash.style.opacity = 0, 150);
+}
+
+function drawRoundedRect(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  ctx.roundRect(x, y, width, height, radius);
+  ctx.fill();
+}
+
+const faceMesh = new FaceMesh({
+  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+});
+
+faceMesh.setOptions({
+  maxNumFaces: 1,
+  refineLandmarks: true,
+  minDetectionConfidence: 0.5,
+  minTrackingConfidence: 0.5
+});
+
+faceMesh.onResults((results) => {
+  faceResults = results;
+  drawFrame();
+});
+
+function drawFrame() {
+  // Optimization: Don't draw if not in camera view
+  if(currentView !== 'camera') return;
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (video.readyState >= 2) {
+    const vWidth = video.videoWidth;
+    const vHeight = video.videoHeight;
+    const cWidth = canvas.width;
+    const cHeight = canvas.height;
+    const scale = Math.max(cWidth / vWidth, cHeight / vHeight);
+    const xOffset = (cWidth - (vWidth * scale)) / 2;
+    const yOffset = (cHeight - (vHeight * scale)) / 2;
+
+    ctx.drawImage(video, xOffset, yOffset, vWidth * scale, vHeight * scale);
+
+    if (faceResults && faceResults.multiFaceLandmarks && faceResults.multiFaceLandmarks.length > 0) {
+      const landmarks = faceResults.multiFaceLandmarks[0];
+
+      const getPt = (index) => {
+        return {
+          x: (landmarks[index].x * vWidth * scale) + xOffset,
+          y: (landmarks[index].y * vHeight * scale) + yOffset
+        };
+      };
+
+      const leftEye = getPt(33);
+      const rightEye = getPt(263);
+      const topHead = getPt(10);
+      const forehead = getPt(151);
+      const leftCheek = getPt(50); 
+      const rightCheek = getPt(280);
+
+      const dx = rightEye.x - leftEye.x;
+      const dy = rightEye.y - leftEye.y;
+      const angle = Math.atan2(dy, dx);
+      const cx = (leftEye.x + rightEye.x) / 2;
+      const cy = (leftEye.y + rightEye.y) / 2;
+
+      const faceWidth = Math.hypot(dx, dy) * 1.8; 
+
+      ctx.save();
+      
+      // --- FILTER: SUNGLASSES ---
+      if (currentFilter === 'sunglasses') {
+        ctx.translate(cx, cy);
+        ctx.rotate(angle);
+        const glassW = faceWidth * 0.32;
+        const glassH = glassW * 0.65;
+        const bridge = glassW * 0.25;
+        ctx.fillStyle = '#000';
+        drawRoundedRect(ctx, -glassW - bridge/2, -glassH/2, glassW, glassH, 8);
+        drawRoundedRect(ctx, bridge/2, -glassH/2, glassW, glassH, 8);
+        ctx.fillRect(-bridge, -glassH * 0.2, bridge * 2, 6);
+        const grad = ctx.createLinearGradient(-glassW, -glassH, glassW, glassH);
+        grad.addColorStop(0, 'rgba(255,0,255,0.4)');
+        grad.addColorStop(1, 'rgba(0,255,255,0.1)');
+        ctx.fillStyle = grad;
+        drawRoundedRect(ctx, -glassW - bridge/2 + 3, -glassH/2 + 3, glassW - 6, glassH - 6, 6);
+        drawRoundedRect(ctx, bridge/2 + 3, -glassH/2 + 3, glassW - 6, glassH - 6, 6);
+      }
+
+      // --- FILTER: CROWN ---
+      if (currentFilter === 'crown') {
+        const crownY = topHead.y;
+        ctx.translate(topHead.x, crownY);
+        ctx.rotate(angle);
+        const cw = faceWidth * 0.7;
+        const ch = cw * 0.6;
+        const gold = ctx.createLinearGradient(-cw/2, -ch, cw/2, 0);
+        gold.addColorStop(0, '#ffffa0');
+        gold.addColorStop(1, '#daa520');
+        ctx.fillStyle = gold;
+        ctx.strokeStyle = '#b8860b';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-cw/2, 0);
+        ctx.lineTo(-cw/2, -ch * 0.6);
+        ctx.lineTo(-cw * 0.25, -ch * 0.4);
+        ctx.lineTo(0, -ch);
+        ctx.lineTo(cw * 0.25, -ch * 0.4);
+        ctx.lineTo(cw/2, -ch * 0.6);
+        ctx.lineTo(cw/2, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      // --- FILTER: ANGRY ANIME ---
+      if (currentFilter === 'angry') {
+        [leftCheek, rightCheek].forEach(pt => {
+           const grad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, faceWidth * 0.2);
+           grad.addColorStop(0, 'rgba(220, 20, 60, 0.7)');
+           grad.addColorStop(1, 'transparent');
+           ctx.fillStyle = grad;
+           ctx.beginPath(); ctx.arc(pt.x, pt.y, faceWidth * 0.2, 0, Math.PI*2); ctx.fill();
+        });
+
+        ctx.translate(cx, cy);
+        ctx.rotate(angle);
+        ctx.strokeStyle = '#cc0000';
+        ctx.lineWidth = faceWidth * 0.04;
+        ctx.lineCap = 'round';
+        const browOffset = faceWidth * 0.25;
+        const browY = -faceWidth * 0.2;
+        ctx.beginPath();
+        ctx.moveTo(-browOffset - faceWidth*0.15, browY - faceWidth*0.1);
+        ctx.lineTo(-browOffset + faceWidth*0.05, browY + faceWidth*0.05);
+        ctx.moveTo(browOffset + faceWidth*0.15, browY - faceWidth*0.1);
+        ctx.lineTo(browOffset - faceWidth*0.05, browY + faceWidth*0.05);
+        ctx.stroke();
+
+        ctx.restore(); 
+        ctx.save();
+        ctx.translate(forehead.x, forehead.y);
+        ctx.rotate(angle);
+        ctx.strokeStyle = '#cc0000';
+        ctx.lineWidth = faceWidth * 0.03;
+        const veinSize = faceWidth * 0.15;
+        ctx.beginPath();
+        ctx.moveTo(-veinSize, -veinSize); ctx.lineTo(0, 0);
+        ctx.moveTo(veinSize, -veinSize); ctx.lineTo(0, 0);
+        ctx.moveTo(-veinSize, veinSize); ctx.lineTo(0, 0);
+        ctx.moveTo(veinSize, veinSize); ctx.lineTo(0, 0);
+        ctx.moveTo(-veinSize*1.2, -veinSize*0.5); 
+        ctx.quadraticCurveTo(-veinSize*1.5, -veinSize*1.5, -veinSize*0.5, -veinSize*1.2);
+        ctx.stroke();
+      }
+
+      // --- FILTER: BLUSH ---
+      if (currentFilter === 'blush') {
+        [leftCheek, rightCheek].forEach(pt => {
+           const grad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, faceWidth * 0.25);
+           grad.addColorStop(0, 'rgba(255, 105, 180, 0.4)'); 
+           grad.addColorStop(0.5, 'rgba(255, 105, 180, 0.2)');
+           grad.addColorStop(1, 'transparent');
+           ctx.fillStyle = grad;
+           ctx.beginPath(); ctx.arc(pt.x, pt.y, faceWidth * 0.25, 0, Math.PI*2); ctx.fill();
+        });
+      }
+
+      ctx.restore();
+    }
+  }
+}
+
+const camera = new Camera(video, {
+  onFrame: async () => {
+    // Only process camera frame if we are in camera view
+    if(currentView === 'camera') {
+      await faceMesh.send({image: video});
+    } else {
+      // If we are in Chat/Profile, we don't need to process the video, 
+      // but we need to keep the loop alive slightly to not freeze if we switch back.
+      // However, mediaPipe camera util handles the loop. We just skip the 'send'.
+      // To be safe, we just let it run but the drawFrame won't render.
+    }
+  },
+  width: 1280,
+  height: 720
+});
+
+camera.start();
+</script>
+</body>
+</html>
